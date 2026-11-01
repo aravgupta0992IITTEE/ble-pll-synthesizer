@@ -1,0 +1,22 @@
+LTspice 26.1.1 for Windows
+Circuit: C:\Users\aravg\Documents\PLL_LTspice_Schematic\pll_synth.net
+Start Time: Sun Nov  1 12:06:05 2026
+Options:method=gear
+solver = Normal
+Maximum thread count: 8
+tnom = 27
+temp = 27
+method = Gear
+WARNING: Node vc is floating.
+
+Per .tran options, skipping operating point for transient analysis.
+Total elapsed time: 6.406 seconds.
+Total iterations: 1065259
+
+Files loaded:
+C:\Users\aravg\Documents\PLL_LTspice_Schematic\pll_synth.net
+C:\Users\aravg\Documents\PLL_LTspice_Schematic\pll_blocks.lib
+
+fa: AVG(V(fvco))=2402.00062984 FROM 3.5e-05 TO 3.9e-05
+fb: AVG(V(fvco))=2479.99733413 FROM 0.000115 TO 0.000119
+vcb: AVG(V(vc))=2.53331556819 FROM 0.000115 TO 0.000119
