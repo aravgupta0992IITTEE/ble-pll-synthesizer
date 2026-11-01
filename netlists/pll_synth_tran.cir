@@ -1,0 +1,85 @@
+* 2.4 GHz BLE PLL synthesizer - behavioral transient (lock + channel hop)
+* --------------------------------------------------------------------------
+* Integer-N charge-pump PLL, fREF = 1 MHz, N = 2402..2480 (BLE ch 0..39)
+*   PFD      : tri-state phase-frequency detector (two latches + AND reset)
+*              with RESET DELAY (anti dead-zone) = TRST
+*   CP       : ICP up / ICP*(1+MIS) down (MIS models up/down mismatch)
+*   Filter   : 3rd-order passive  C1 || (R2+C2) -> R3-C3   (from pll_design.py)
+*   VCO      : f = F0 + KV*Vc, 2.10 GHz + 150 MHz/V, tuning limited to 0.2..3.1 V
+*   Divider  : /N, N switchable on the fly (phase-domain model: the divider
+*              phase integrates fVCO/N, so edges are exact and no 2.4 GHz
+*              waveform needs to be simulated -> fast run time)
+* Scenario: lock on channel 2402 MHz, then at t = 40 us hop to 2480 MHz
+*           (worst-case 78 MHz jump, full band).
+* Logic levels are 0..1 V. Signals: ref, div, up, dn, vc, fvco (in MHz)
+* --------------------------------------------------------------------------
+.param FREF=1Meg F0=2.1G KV=150Meg ICP=1m
+.param MIS=0
+.param TRST=2n
+.param NA=2402 NB=2480 THOP=40u
+
+* ---------------- Reference (1 MHz crystal, buffered) ----------------
+VREF ref 0 PULSE(0 1 0.5u 0.2n 0.2n 0.5u 1u)
+
+* ---------------- Divide ratio (channel select) ----------------
+VN nsel 0 PWL(0 {NA} {THOP} {NA} {THOP+10n} {NB})
+
+* ---------------- VCO + divider (phase domain) ----------------
+* fvco in Hz, tuning voltage clamped to 0.2..3.1 V (varactor range)
+BF  fvco_hz 0 V=F0+KV*min(max(V(vc),0.2),3.1)
+EFM fvco 0 fvco_hz 0 1e-6
+* divider phase in cycles: d/dt = fvco/N
+BDV 0 phd I=V(fvco_hz)/V(nsel)
+CDV phd 0 1
+RDV phd 0 1e15
+* divider output: rising edge each time phd crosses an integer
+BDO div 0 V=0.5+0.5*tanh(30*sin(6.283185307*V(phd)))
+
+* ---------------- PFD ----------------
+* logic threshold function used below:  s(x) = 0.5*(1+tanh(40*(x-0.5)))
+* edge detectors: signal AND NOT(delayed signal) -> ~0.7 ns pulse on each rising edge
+* (must be SHORTER than the reset delay, or a latch re-sets after reset)
+RRD ref refd 1k
+CRD refd 0 1p
+RDD div divd 1k
+CDD divd 0 1p
+BER er 0 V=0.25*(1+tanh(40*(V(ref)-0.5)))*(1+tanh(40*(0.5-V(refd))))
+BED ed 0 V=0.25*(1+tanh(40*(V(div)-0.5)))*(1+tanh(40*(0.5-V(divd))))
+* latch state nodes (memory caps): set by the edge pulse, reset has priority
+BUM 0 upm I=1m*(0.5*(1+tanh(40*(V(er)-0.5)))*(1-V(rsd))*(1-V(upm)) - V(rsd)*V(upm))
+CUM upm 0 0.2p
+RUM upm 0 1G
+BDM 0 dnm I=1m*(0.5*(1+tanh(40*(V(ed)-0.5)))*(1-V(rsd))*(1-V(dnm)) - V(rsd)*V(dnm))
+CDM dnm 0 0.2p
+RDM dnm 0 1G
+* clean logic outputs
+BUP up 0 V=0.5*(1+tanh(40*(V(upm)-0.5)))
+BDN dn 0 V=0.5*(1+tanh(40*(V(dnm)-0.5)))
+* AND gate + reset delay (TRST) -> clears both latches
+BRS rs 0 V=V(up)*V(dn)
+RRS rs rsdl {TRST/1p}
+CRS rsdl 0 1p
+BRD rsd 0 V=0.5*(1+tanh(40*(V(rsdl)-0.5)))
+
+* ---------------- Charge pump (with output compliance 0.1..3.2 V) ----------------
+BCP 0 vcp I=ICP*(V(up)*0.5*(1+tanh(20*(3.2-V(vcp)))) - (1+MIS)*V(dn)*0.5*(1+tanh(20*(V(vcp)-0.1))))
+
+* ---------------- Loop filter (pll_design.py, E-series values) ----------------
+C1 vcp 0 39p
+R2 vcp n2 11k
+C2 n2 0 470p
+R3 vcp vc 10k
+C3 vc 0 10p
+
+* ---------------- Initial conditions: VCO starts 2 MHz low (not locked) ----------------
+.ic V(vcp)=2.0 V(n2)=2.0 V(vc)=2.0 V(phd)=-0.4
+
+.options method=gear
+.tran 1n 120u 0 0.25n uic
+* frequency at the end of each channel (average out the ref ripple)
+.meas tran fA AVG V(fvco) FROM=35u TO=39u
+.meas tran fB AVG V(fvco) FROM=115u TO=119u
+.meas tran vcB AVG V(vc) FROM=115u TO=119u
+* to see reference spurs from charge-pump mismatch:
+* .step param MIS list 0 0.1
+.end

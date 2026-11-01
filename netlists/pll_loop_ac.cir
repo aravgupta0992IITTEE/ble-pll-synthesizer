@@ -1,0 +1,67 @@
+* 2.4 GHz BLE PLL - linear (phase-domain) loop model: stability and noise transfer
+* --------------------------------------------------------------------------------
+* Every block is represented by its small-signal phase-domain model, so the
+* AC analysis gives the true loop dynamics.
+* Voltages on the "phase" nodes are in radians.
+*
+*   PFD + CP : Kphi = Icp/2pi             -> G source (A per rad)
+*   Filter   : C1 || (R2 + C2), then R3-C3 -> real components
+*   VCO      : Kvco/s  (phase = integral of 2pi*Kv*Vc) -> G source into 1 F
+*   Divider  : 1/N                          -> E source
+*
+* Three circuits are solved in one AC run:
+*   V(fb)      open-loop gain (loop broken, test source = 1)  -> BW and phase margin
+*   V(out_ref) closed loop, ref phase -> output phase  (low-pass, gain N = 67.8 dB)
+*   V(out_vco) closed loop, VCO phase noise -> output    (high-pass)
+* --------------------------------------------------------------------------------
+.param ICP=1m KV=150Meg N=2441
+.param KPHI={ICP/6.283185307}
+.param KVCO={6.283185307*KV}
+
+* ============ OPEN-LOOP: phase error -> feedback phase ============
+VT   perr 0 AC 1
+GCP  0 vcp perr 0 {KPHI}
+C1   vcp 0 39p
+R2   vcp n2 11k
+C2   n2 0 470p
+R3   vcp vc 10k
+C3   vc 0 10p
+* VCO as integrator: d(phase)/dt = Kvco*Vc
+GVCO 0 phv vc 0 {KVCO}
+CVCO phv 0 1
+RVCO phv 0 1e15
+EDIV fb 0 phv 0 {1/N}
+
+* ============ CLOSED-LOOP: ref noise and VCO noise transfer ============
+* (a) reference phase in -> output phase  (should be N at low f, low-pass)
+VRF  rin 0 AC 1
+BPD1 0 vcpA I=KPHI*(V(rin)-V(fbA))
+C1A  vcpA 0 39p
+R2A  vcpA n2A 11k
+C2A  n2A 0 470p
+R3A  vcpA vcA 10k
+C3A  vcA 0 10p
+GVA  0 out_ref vcA 0 {KVCO}
+CVA  out_ref 0 1
+RVA  out_ref 0 1e15
+EDA  fbA 0 out_ref 0 {1/N}
+* (b) VCO phase noise injected -> output phase (should be high-pass)
+VVN  vn 0 AC 1
+BPD2 0 vcpB I=KPHI*(0-V(fbB))
+C1B  vcpB 0 39p
+R2B  vcpB n2B 11k
+C2B  n2B 0 470p
+R3B  vcpB vcB 10k
+C3B  vcB 0 10p
+GVB  0 phB vcB 0 {KVCO}
+CVB  phB 0 1
+RVB  phB 0 1e15
+* output phase = loop-corrected phase + injected VCO noise
+BOB  out_vco 0 V=V(phB)+V(vn)
+EDB  fbB 0 out_vco 0 {1/N}
+
+.ac dec 100 1k 100Meg
+.meas AC fc  WHEN mag(V(fb))=1
+.meas AC ph_at_fc FIND ph(V(fb)) WHEN mag(V(fb))=1
+* phase margin = 180 deg + ph_at_fc
+.end
