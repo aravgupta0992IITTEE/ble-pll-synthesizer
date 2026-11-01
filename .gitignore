@@ -1,0 +1,7 @@
+# LTspice outputs (regenerated on every run)
+ltspice_schematic/*.raw
+ltspice_schematic/*.log
+ltspice_schematic/*.net
+ltspice_schematic/*.db
+ltspice_schematic/*.op.raw
+__pycache__/
