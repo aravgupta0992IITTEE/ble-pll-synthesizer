@@ -2,8 +2,7 @@
 
 ![Schematic of ltspice_schematic/pll_synth.asc](results/00_schematic.png)
 
-**One line for your resume:**
-*Designed and simulated an integer-N charge-pump PLL frequency synthesizer for the 2.4 GHz Bluetooth band (2402–2480 MHz, 1 MHz reference). I derived the 3rd-order loop filter from specs (98 kHz bandwidth, 52° phase margin), verified stability with a phase-domain AC model, and verified lock, a worst-case 78 MHz channel hop (settles to ±50 kHz in 25 µs) and reference spurs (−88 dBc, degrading to −68 dBc with 10 % charge-pump mismatch) with a behavioral PFD/CP/VCO/divider transient model.*
+**Summary:** *Designed and simulated an integer-N charge-pump PLL frequency synthesizer for the 2.4 GHz Bluetooth band (2402–2480 MHz, 1 MHz reference). I derived the 3rd-order loop filter from specs (98 kHz bandwidth, 52° phase margin), verified stability with a phase-domain AC model, and verified lock, a worst-case 78 MHz channel hop (settles to ±50 kHz in 25 µs) and reference spurs (−88 dBc, degrading to −68 dBc with 10 % charge-pump mismatch) with a behavioral PFD/CP/VCO/divider transient model.*
 
 ---
 
@@ -46,7 +45,7 @@ f_out = N × f_ref = N × 1 MHz, with N = 2402 … 2480
 
 ## 3. Loop design (`design/pll_design.py`)
 
-**Choices and why:**
+**Design choices:**
 - **Loop bandwidth f_c = 100 kHz = f_ref/10.** A rule of thumb: much above f_ref/10 the sampled PFD makes the loop unstable and the ref spurs grow. A wider bandwidth gives faster settling and suppresses more VCO noise.
 - **Phase margin 55°.** About 15 % overshoot, a good balance between speed and ringing.
 - **Charge pump 1 mA, K_VCO = 150 MHz/V.** These are typical for an integrated BLE radio.
@@ -72,9 +71,9 @@ C1 = Ctot·T1/T2,  C2 = Ctot − C1,  R2 = T2/C2,  R3 = T3/C3
 
 Exact check including the R3/C3 loading: **BW = 97.5 kHz, PM = 52.5°**. The 3rd pole costs about 2.5° of the 55° target.
 
-- **Why R2 (the zero)?** Without it, the two integrators (the charge pump into a capacitor, and the VCO) give 180° phase shift and the loop oscillates. The zero restores phase margin.
-- **Why C1?** It smooths the step that each current pulse causes across R2 (ref ripple).
-- **Why R3/C3?** An extra pole at 1.6 MHz for more reference-spur filtering.
+- **R2 (the zero):** Without it, the two integrators (the charge pump into a capacitor, and the VCO) give 180° phase shift and the loop oscillates. The zero restores phase margin.
+- **C1:** It smooths the step that each current pulse causes across R2 (ref ripple).
+- **R3/C3:** An extra pole at 1.6 MHz for more reference-spur filtering.
 
 ## 4. Results
 
@@ -105,11 +104,11 @@ Final values: 2480.005 MHz, Vc = 2.533 V (theory: (2480 − 2100)/150 = 2.533 V 
 
 ![Lock and hop](results/01_lock_and_hop.png)
 
-**Why 24 % overshoot when the linear model predicts about 15 %?** A 78 MHz step is far outside the linear range. The phase error exceeds 2π and the PFD **cycle-slips**, working as a frequency detector until the error falls back inside ±2π. This is *nonlinear* acquisition, and the reason real radios use **VCO band pre-selection** (a coarse capacitor bank) before closing the loop.
+**Overshoot: 24 % vs. ~15 % predicted by the linear model.** A 78 MHz step is far outside the linear range. The phase error exceeds 2π and the PFD **cycle-slips**, working as a frequency detector until the error falls back inside ±2π. This is *nonlinear* acquisition, and the reason real radios use **VCO band pre-selection** (a coarse capacitor bank) before closing the loop.
 
 ![PFD waveforms](results/02_pfd_waveforms.png)
 
-**Why the reset delay (~0.8 ns pulses when locked)?** If UP and DN were allowed to be arbitrarily narrow, the charge pump couldn't switch fully on for tiny phase errors. That creates a **dead zone**: no correction at all for small errors, which shows up as jitter. Forcing both pulses to a minimum width keeps the PFD + CP gain linear around zero.
+**Reset delay (~0.8 ns pulses when locked).** If UP and DN were allowed to be arbitrarily narrow, the charge pump couldn't switch fully on for tiny phase errors. That creates a **dead zone**: no correction at all for small errors, which shows up as jitter. Forcing both pulses to a minimum width keeps the PFD + CP gain linear around zero.
 
 ### 4.3 Reference spurs and charge-pump mismatch
 
@@ -160,20 +159,7 @@ The log's *"Node vc is floating"* warning is expected: the tuning node connects 
 5. Netlists: File → Open → *All files* → `netlists/*.cir` → Run.
 6. Design script: `python3 design/pll_design.py`.
 
-## 7. Interview questions you should expect (with answers)
-
-1. **Why a PFD instead of an XOR / mixer phase detector?** An XOR only detects phase and has limited pull-in range. A PFD also detects *frequency*, so it always acquires lock. It also gives zero output at zero phase error, which with a charge pump means infinite DC gain (type-II loop) and therefore zero static phase error.
-2. **What is a type-II PLL?** It has two integrators in the loop: the charge pump into a capacitor, and the VCO (phase = ∫f). That gives zero steady-state phase error for a frequency step.
-3. **Why is the loop bandwidth limited to about f_ref/10?** The PFD is a sampled system (one update per reference cycle). The continuous-time approximation breaks down near f_ref/π, and wider bandwidth also passes more reference ripple (spurs).
-4. **How does bandwidth trade off?** Wider gives faster lock and more VCO-noise suppression, but more ref/PFD/CP noise and more spurs. Narrower does the opposite. The optimum is near where the in-band noise (×N) meets the VCO noise.
-5. **Why does phase noise get multiplied by N (+20·log N)?** Phase scales with frequency: 1 rad of jitter at 1 MHz is N rad at N MHz. This is why fractional-N is used to get a higher f_ref and a lower N.
-6. **What causes reference spurs?** Charge-pump UP/DN mismatch, CP leakage, and the timing of the reset-delay pulses. Each puts a periodic ripple on Vc at f_ref.
-7. **What is the dead zone, and how is it fixed?** For tiny phase errors the CP pulses are too short to switch fully on, so there is no correction. The fix is a PFD reset delay so that both UP and DN always pulse for a minimum time.
-8. **What is cycle slipping?** For large frequency steps the phase error exceeds 2π and the PFD loses the phase relationship temporarily. Lock time then depends on the slew rate, not the linear bandwidth.
-9. **Why is the divider modeled in the phase domain?** Simulating 2.4 GHz edges for 120 µs needs about 10⁷ time steps. Integrating phase gives exact edge timing at a fraction of the cost. This is how PLLs are modeled in industry (Verilog-A / CppSim).
-10. **Integer-N vs fractional-N?** Integer-N: channel spacing = f_ref, so a small f_ref and a large N mean more noise and a narrow bandwidth. Fractional-N uses a ΣΔ-modulated N to allow a 26–40 MHz reference with fine frequency steps, at the cost of fractional spurs.
-
-## 8. Extensions (good to mention)
+## 7. Extensions
 
 - Fractional-N with a 2nd/3rd-order ΣΔ modulator driving N (26 MHz reference)
 - Transistor-level charge pump (current-steering with an op-amp up/down match) to see the real mismatch
@@ -181,7 +167,7 @@ The log's *"Node vc is floating"* warning is expected: the tuning node connects 
 - VCO band switching (capacitor bank) + automatic band calibration before closed-loop lock
 - Lock detector (counts UP/DN pulses wider than a threshold)
 
-## 9. Model limitations
+## 8. Model limitations
 
 - PFD, VCO and divider are behavioral (ideal, noiseless). The output is the frequency/phase, not a 2.4 GHz waveform.
 - Small (±15 kHz) per-cycle frequency jitter in the locked transient is numerical (time-step quantization of sub-ns pulses), not physical.
