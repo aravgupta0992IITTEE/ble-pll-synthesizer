@@ -1,41 +1,41 @@
-"""
-PLL loop-filter design script - 2.4 GHz Bluetooth LO synthesizer
-=================================================================
-Specs in -> loop-filter component values out, plus a check of the
-achieved bandwidth and phase margin using the exact filter impedance.
 
-Topology (3rd-order passive filter, 4th-order type-II loop):
+PLL Loop-filter design Script - 2.4 GHz Bluetooth LO synthesizer
+
+Specs in = loop-filter Component values out, plus a check of the
+achieved Bandwidth and phase margin using the exact filter impedance.
+
+      (3rd-order passive filter, 4th-order type-II loop):
 
    charge pump ──┬────────┬──── R3 ────┬──── VCO tune (Vc)
                  C1       R2           C3
                  │        C2           │
                 GND      GND          GND
 
-Run:  python3 pll_design.py
+Run Command:  python3 pll_design.py
 """
 import math, cmath
 
-# ------------------------- SPECS -------------------------
-FREF  = 1e6          # reference / channel spacing (Hz)  -> integer-N
-N_MIN, N_MAX = 2402, 2480   # BLE/BT channels 2402..2480 MHz
+#SPECS
+FREF  = 1e6          # channel spacing (Hz) 
+N_MIN, N_MAX = 2402, 2480   # BLE/BT channels 2402-2480 (MHz)
 F0    = 2.1e9        # VCO free-running freq at Vc = 0 (Hz)
 KV    = 150e6        # VCO gain (Hz/V)
 ICP   = 1e-3         # charge-pump current (A)
-FC    = 100e3        # loop bandwidth (Hz)  ~ FREF/10 for stability and spur filtering
-PM    = 55.0         # phase margin (deg)    -> ~15 % overshoot, fast settling
-T31   = 0.25         # 3rd pole time constant as a fraction of T1 (spur attenuation)
-C3    = 10e-12       # chosen; R3 = T3/C3 (C3 should be << C1)
-# ---------------------------------------------------------
+FC    = 100e3        # loop bandwidth (Hz)  
+PM    = 55.0         # phase margin (deg)    
+T31   = 0.25         # 3rd pole time constant/fraction of T1 
+C3    = 10e-12       # chosen; R3 = T3/C3 
 
-N   = round((N_MIN + N_MAX) / 2)     # design at mid-band: gain varies only +/-1.6 %
+
+N   = round((N_MIN + N_MAX) / 2)    
 wc  = 2 * math.pi * FC
-Kphi = ICP / (2 * math.pi)           # A/rad
-Kvco = 2 * math.pi * KV              # rad/s/V
+Kphi = ICP / (2 * math.pi)        
+Kvco = 2 * math.pi * KV              
 pm   = math.radians(PM)
 
 def phase_margin(T1):
     T3 = T31 * T1
-    T2 = 1 / (wc**2 * (T1 + T3))     # puts the phase peak at wc
+    T2 = 1 / (wc**2 * (T1 + T3))    
     return math.atan(wc*T2) - math.atan(wc*T1) - math.atan(wc*T3), T2, T3
 
 # bisection for T1 that gives the requested phase margin
@@ -54,11 +54,11 @@ C2 = Ctot - C1
 R2 = T2 / C2
 R3 = T3 / C3
 
-# ---- exact check with the real impedance (including C3/R3 loading) ----
+#  exact check with the real impedance including C3/R3 loading
 def Zfilt(s):
     zc1 = 1/(s*C1); zb = R2 + 1/(s*C2); zc3 = 1/(s*C3)
     z_in = 1/(1/zc1 + 1/zb + 1/(R3 + zc3))
-    return z_in * zc3 / (R3 + zc3)            # transimpedance CP current -> Vc
+    return z_in * zc3 / (R3 + zc3)           
 
 def G(f, n=N):
     s = 2j*math.pi*f
